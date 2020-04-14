@@ -1,0 +1,13 @@
+/node_modules
+/vscode
+/.vscode
+/build
+.env
+/.env
+/.editorconfig
+/.eslintrc.js
+/.prettierrc.js
+.editorconfig
+.eslintrc.js
+.prettierrc.js
+

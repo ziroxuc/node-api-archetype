@@ -1,0 +1,119 @@
+image: 2brains/npm-builder:latest
+    
+definitions:
+  steps:
+    - step: &download-dependencies
+        name: Download dependencies
+        script:
+          - npm install
+        artifacts:
+          - node_modules/** 
+   
+pipelines:    
+  tags:
+    'RC-v*':
+      - step: *download-dependencies
+      - step: 
+          name: Build Docker Image
+          services:
+            - docker
+          script:  
+            # Login 
+            - docker login socovesa.azurecr.io -u socovesa -p $DOCKER_PASSWORD
+
+            # Build the Docker image (this will use the Dockerfile in the root of the repo)
+            - export IMAGE_NAME=socovesa-backend
+            - docker build -t $IMAGE_NAME:$BITBUCKET_TAG .
+
+            # Yagging image for push
+            - docker tag $IMAGE_NAME:$BITBUCKET_TAG socovesa.azurecr.io/$IMAGE_NAME:$BITBUCKET_TAG
+
+            # Push the new Docker image to the elastic container registry
+            - docker push socovesa.azurecr.io/$IMAGE_NAME:$BITBUCKET_TAG
+      
+      - step:
+          name: Deploy to Staging
+          deployment: staging
+          script:
+            - pipe: microsoft/azure-aks-deploy:1.0.1
+              variables:
+                AZURE_APP_ID: $AZURE_APP_ID
+                AZURE_PASSWORD: $AZURE_PASSWORD
+                AZURE_TENANT_ID: $AZURE_TENANT_ID
+                AZURE_AKS_NAME: 'Socovesa-QA'
+                AZURE_RESOURCE_GROUP: 'Socovesa'
+                KUBECTL_COMMAND: 'set'
+                KUBECTL_ARGUMENTS: 'image deployment.apps/socovesa-backend socovesa-backend=socovesa.azurecr.io/socovesa-backend:$BITBUCKET_TAG'
+
+    'v*':
+      - step: *download-dependencies
+      - step: 
+          name: Build Docker Image
+          services:
+            - docker
+          script:  
+            # Login 
+            - docker login acrIntranetClientes.azurecr.io -u acrIntranetClientes -p $DOCKER_PASSWORD_SOCO
+
+            # Build the Docker image (this will use the Dockerfile in the root of the repo)
+            - export IMAGE_NAME=socovesa-backend
+            - docker build -t $IMAGE_NAME:$BITBUCKET_TAG .
+
+            # Yagging image for push
+            - docker tag $IMAGE_NAME:$BITBUCKET_TAG acrIntranetClientes.azurecr.io/$IMAGE_NAME:$BITBUCKET_TAG
+
+            # Push the new Docker image to the elastic container registry
+            - docker push acrIntranetClientes.azurecr.io/$IMAGE_NAME:$BITBUCKET_TAG
+      
+      - step:
+          name: Deploy to Production
+          deployment: production
+          trigger: manual
+          script:
+            - pipe: microsoft/azure-aks-deploy:1.0.1
+              variables:
+                AZURE_APP_ID: $AZURE_APP_ID
+                AZURE_PASSWORD: $AZURE_PASSWORD
+                AZURE_TENANT_ID: $AZURE_TENANT_ID
+                AZURE_AKS_NAME: $AZURE_AKS_NAME
+                AZURE_RESOURCE_GROUP: $AZURE_RESOURCE_GROUP
+                KUBECTL_COMMAND: 'set'
+                KUBECTL_ARGUMENTS: 'image deployment.apps/socovesa-backend socovesa-backend=acrIntranetClientes.azurecr.io/socovesa-backend:$BITBUCKET_TAG'
+
+
+  branches:
+    develop:
+      - step: *download-dependencies
+      - step: 
+          name: Build Docker Image
+          services:
+            - docker
+          script:  
+            # Login 
+            - docker login socovesa.azurecr.io -u socovesa -p $DOCKER_PASSWORD
+
+            # Build the Docker image (this will use the Dockerfile in the root of the repo)
+            - export IMAGE_NAME=socovesa-backend
+            - docker build -t $IMAGE_NAME:$BITBUCKET_COMMIT .
+
+            # Yagging image for push
+            - docker tag $IMAGE_NAME:$BITBUCKET_COMMIT socovesa.azurecr.io/$IMAGE_NAME:$BITBUCKET_COMMIT
+            - docker tag $IMAGE_NAME:$BITBUCKET_COMMIT socovesa.azurecr.io/$IMAGE_NAME:$BITBUCKET_BRANCH
+
+            # Push the new Docker image to the elastic container registry
+            - docker push socovesa.azurecr.io/$IMAGE_NAME:$BITBUCKET_COMMIT
+            - docker push socovesa.azurecr.io/$IMAGE_NAME:$BITBUCKET_BRANCH
+
+      - step:
+          name: Deploy to Develop
+          deployment: develop
+          script:
+            - pipe: microsoft/azure-aks-deploy:1.0.1
+              variables:
+                AZURE_APP_ID: $AZURE_APP_ID
+                AZURE_PASSWORD: $AZURE_PASSWORD
+                AZURE_TENANT_ID: $AZURE_TENANT_ID
+                AZURE_AKS_NAME: 'Socovesa-DEV'
+                AZURE_RESOURCE_GROUP: 'Socovesa'
+                KUBECTL_COMMAND: 'set'
+                KUBECTL_ARGUMENTS: 'image deployment.apps/socovesa-backend socovesa-backend=socovesa.azurecr.io/socovesa-backend:$BITBUCKET_COMMIT'
